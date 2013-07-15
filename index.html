@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta name="viewport" content="width=device-width, user-scalable=no" />
+        <script type="text/javascript">
+            //global variables
+            var gameArea;
+            var gameCtx;
+            var playerX;
+            var playerY;
+            var playerHeight;
+            var playerWidth;
+            var playerSpeed;
+            var playerVelocityX;
+            var playerVelocityY;
+            var playerInAir;
+            var keyboardMap = new Array();
+            var cameraY;
+            var updateLoop;
+            var running;
+            var FPS;
+            var lastLoop;
+            var currentFPS;
+            var FPScounter;
+            var newestPlatformNumber;
+            var genPrevX;
+            var genPrevY;
+            var accelerationX;
+            var accelerationY;
+            var accelerationZ;
+            var dead;
+            var isTouched;
+            var musicQuality = new Array();
+            var prevPlayerVelocityY;
+            var playerVirtualVelocityX;
+            var playerVirtualVelocityY;
+
+            var gravity=0.1;
+            
+            //platform variables for all platforms
+            var platformHeight = new Array();
+            var platformWidth = new Array();
+            var platformType = new Array();
+            var platformColor = new Array();
+            
+            //platform variables for type="normal" platforms
+            var platformX = new Array();
+            var platformY = new Array();
+            
+            //used for type="moving" platforms
+            var platformStartX = new Array();
+            var platformStartY = new Array();
+            var platformEndX = new Array();
+            var platformEndY = new Array();
+            var platformTime = new Array();
+            
+            //system platform arrays
+            var platformMovementInvertedX = new Array();
+            var platformMovementInvertedY = new Array();
+            var platformMovementPerFrameX = new Array();
+            var platformMovementPerFrameY = new Array();
+            
+            var amountOfPlatforms;
+            
+            //keys
+            var key_up=87;
+            var key_left=65;
+            var key_down=83;
+            var key_up=87;
+            var key_right=68;
+            var key_jump=32;
+            var key_pause=80;
+            var key_restart=82;
+            
+            function testForMobile()
+            {
+                return /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent)
+            }
+            
+            //random number in range
+            function random (min, max)
+            {
+                return Math.random() * (max - min) + min;
+            }
+            
+            //Make static platform code, for world gen
+            function newPlatformStatic(x, y, width)
+            {
+                platformType[amountOfPlatforms] = "normal";
+                platformX[amountOfPlatforms] = x;
+                platformY[amountOfPlatforms] = y;
+                platformWidth[amountOfPlatforms] = width;
+                
+                platformHeight[amountOfPlatforms] = 10;
+                platformColor[amountOfPlatforms] = "rgba(0, 0, 0, 1)";
+                console.log("new static at "+x+" "+y+" "+width);
+            }
+            
+            //Make moving platform code, for world gen
+            function newPlatformMoving(startX, startY, endX, endY, time, width)
+            {
+                platformType[amountOfPlatforms] = "moving";
+                platformStartX[amountOfPlatforms] = startX;
+                platformStartY[amountOfPlatforms] = startY;
+                platformEndX[amountOfPlatforms] = endX;
+                platformEndY[amountOfPlatforms] = endY;
+                platformTime[amountOfPlatforms] = time;
+                platformWidth[amountOfPlatforms] = width;
+                
+                platformHeight[amountOfPlatforms] = 10;
+                platformColor[amountOfPlatforms] = "rgba(0, 0, 0, 1)";
+                console.log("new moving at "+startX+" "+startY+" "+width+", with ends at "+endX+" "+endY+" over "+time+" frames.");
+            }
+            
+            //World generator
+            function generate(num)
+            {
+                //make [num] new platforms
+                for (var i=1; i<=num; i++)
+                {
+                    if (amountOfPlatforms == 0)
+                    {
+                        newPlatformStatic(0, 10, gameArea.width);
+                        amountOfPlatforms++;
+                    }
+                    //Decide what type should be generated
+                    var type = Math.floor(Math.random()*4)
+                    
+                    //make random X, Y and width
+                    var width = random(50, 100);
+                    width -= Math.floor(-cameraY/300);
+                    if (width < 5)
+                    {
+                        width = 5;
+                        width += random(1, 6);
+                    }
+                    var x = random(genPrevX-200, genPrevX+200);
+                    //make sure X is not out of the map
+                    if (x < 0)
+                    {
+                        x = 0;
+                    } else if (x > gameArea.width-width)
+                    {
+                        x = gameArea.width-width;
+                    }
+                    var y = random(genPrevY+50, genPrevY+70)
+                    
+                    switch (type)
+                    {
+                        case 0: //regular platform
+                        newPlatformStatic(x, y, width);
+                        break;
+                        
+                        case 1: //large platform
+                        width *= 1.3
+                        newPlatformStatic(x, y, width);
+                        break;
+                        
+                        case 2: //platforms moving along the X axis
+                        width *= 1.4
+                        var xEnd = random(x+400, x-400);
+                        if (xEnd < 0)
+                        {
+                            xEnd = 0;
+                        } else if (xEnd > gameArea.width-width)
+                        {
+                            xEnd = gameArea.width-width;
+                        }
+                        var speed = Math.abs(x-xEnd)*random(0.2, 1);
+                        newPlatformMoving(x, y, xEnd, y+0.1, speed, width);
+                        x = xEnd;
+                        break;
+                        
+                        case 3: //platforms moving along the Y axis
+                        var yEnd = random(genPrevY+80, genPrevY+300);
+                        var speed = Math.abs(y-yEnd)*random(0.2, 1);
+                        newPlatformMoving(x, y, x, yEnd, speed, width);
+                        y = yEnd;
+                        break;
+                    }
+                    amountOfPlatforms++;
+                    genPrevX = x;
+                    genPrevY = y;
+                }
+            }
+            
+            //modifying the Y coordinate to fit Canvas' coordinate grid
+            function drawYModifier(Y, height)
+            {
+                return gameArea.height-Y-height-cameraY;
+            }
+            
+            //Decide if the platform should be drawn
+            function shouldDraw(i)
+            {
+                if (platformType[i] == "normal")
+                {
+                    if (platformY[i]+platformHeight[i]+100 > -cameraY) { return true; }
+                } else if (platformType[i] == "moving")
+                {
+                    if (platformEndY[i]+platformHeight[i]+100 > -cameraY) { return true; }
+                }
+                return false;
+            }
+            
+            //Most drawing happens here.
+            function draw()
+            {
+                //clear and resize
+                gameArea.height = window.innerHeight;
+                gameArea.width = window.innerWidth;
+                
+                //draw lines for moving platforms
+                for (var i=0; i<=amountOfPlatforms; i++)
+                {
+                    if (shouldDraw(i))
+                    {
+                        gameCtx.fillStyle = "rgba(0, 0, 0, 0.5";
+                        gameCtx.beginPath();
+                        gameCtx.moveTo(Math.floor(platformStartX[i]+platformWidth[i]/2), Math.floor(drawYModifier(platformStartY[i]+platformHeight[i]/2, 0)));
+                        gameCtx.lineTo(Math.floor(platformEndX[i]+platformWidth[i]/2), Math.floor(drawYModifier(platformEndY[i]+platformHeight[i]/2, 0)));
+                        gameCtx.stroke();
+                    }
+                }
+                
+                //draw player
+                var addToHeight = -playerVelocityY+playerVirtualVelocityY;
+                var addToTopWidth = playerVelocityX+playerVirtualVelocityX;
+                var xStart = Math.floor(playerX-playerWidth/2);
+                var yStart = Math.floor(drawYModifier(playerY, playerHeight+addToHeight))
+                
+                gameCtx.beginPath();
+                gameCtx.moveTo(xStart, yStart);
+                gameCtx.lineTo(xStart+addToTopWidth, yStart+playerHeight+addToHeight);
+                gameCtx.lineTo(xStart+addToTopWidth+playerWidth, yStart+playerHeight+addToHeight);
+                gameCtx.lineTo(xStart+playerWidth, yStart)
+                gameCtx.closePath();
+                gameCtx.lineWidth = 2;
+                gameCtx.fillStyle = "rgba(0,200,0,1)";
+                gameCtx.strokeStyle = "rgba(0, 100, 0, 1)";
+                gameCtx.fill();
+                gameCtx.stroke();
+
+                //draw platforms
+                for (var i=0; i<=amountOfPlatforms; i++)
+                {
+                    if (shouldDraw(i))
+                    {
+                        if (platformType[i] == "normal") //if type=="normal"
+                        {
+                            gameCtx.fillStyle = platformColor[i];
+                            gameCtx.fillRect (Math.floor(platformX[i]), Math.floor(drawYModifier(platformY[i], platformHeight[i])), Math.floor(platformWidth[i]), Math.floor(platformHeight[i]));
+                        } else if (platformType[i] == "moving") //if type=="moving"
+                        {
+                            gameCtx.fillStyle = platformColor[i];
+                            if (platformX[i] == undefined || platformY[i] == undefined)
+                            {
+                                platformX[i] = platformStartX[i];
+                                platformY[i] = platformStartY[i];
+                                //get amount of pixels to move per frame
+                                platformMovementPerFrameX[i] = Math.abs(platformStartX[i]-platformEndX[i])/platformTime[i];
+                                platformMovementPerFrameY[i] = Math.abs(platformStartY[i]-platformEndY[i])/platformTime[i];
+                                //set inverted to false
+                                platformMovementInvertedX[i] = false;
+                                platformMovementInvertedY[i] = false;true
+                            }
+                            platformX[i] = movingPlatformHandler(platformStartX[i], platformEndX[i], platformX[i], platformTime[i], i, "x");
+                            platformY[i] = movingPlatformHandler(platformStartY[i], platformEndY[i], platformY[i], platformTime[i], i, "y");
+                            
+                            gameCtx.fillStyle = platformColor[i];
+                            gameCtx.fillRect (Math.floor(platformX[i]), Math.floor(drawYModifier(platformY[i], platformHeight[i])), Math.floor(platformWidth[i]), Math.floor(platformHeight[i]));
+                        }
+                    }
+                }
+                //draw score
+                gameCtx.fillStyle = "rgba(0, 0, 0, 1";
+                gameCtx.font = 20 + 'px Arial';
+                gameCtx.fillText("Score: "+-cameraY, 2, 20);
+                
+            }
+            
+            //Handle moving platforms.
+            function movingPlatformHandler(start, end, curr, time, i, coord)
+            {
+                //decide if movement should be inverted or not
+                if (coord == "x")
+                {
+                    var invert = platformMovementInvertedX[i];
+                } else if (coord == "y")
+                {
+                    var invert = platformMovementInvertedY[i];
+                }
+                if (end > start)
+                {
+                    if (curr > end)
+                    {
+                        invert = true;
+                    } else if (curr < start)
+                    {
+                        invert = false;
+                    }
+                } else if (end < start)
+                {
+                    if (curr < end)
+                    {
+                        invert = true;
+                    } else if (curr > start)
+                    {
+                        invert = false;
+                    }
+                }
+                
+                //set pixelsPerFrame and platformMovementInverted properly
+                if (coord == "x")
+                {
+                    var pixelsPerFrame = platformMovementPerFrameX[i];
+                    platformMovementInvertedX[i] = invert;
+                } else if (coord == "y")
+                {
+                    var pixelsPerFrame = platformMovementPerFrameY[i];
+                    platformMovementInvertedY[i] = invert;
+                }
+                
+                //HAAAAAACK!
+                platformMovementInvertedX[i] = platformMovementInvertedY[i];
+                
+                //calculate new position
+                var result;
+                if (platformMovementInvertedX[i] && platformMovementInvertedY[i])
+                {
+                    if (start<end)
+                    {
+                        result = curr-pixelsPerFrame;
+                    } else
+                    {
+                        result = curr+pixelsPerFrame;
+                    }
+                } else
+                {
+                    if (start<end)
+                    {
+                        result = curr+pixelsPerFrame;
+                    } else
+                    {
+                        result = curr-pixelsPerFrame;
+                    }
+                }
+                return result;
+            }
+            
+            //Key press handler.
+            onkeydown=onkeyup=function(e)
+            {
+                e=e||event//to deal with IE
+                keyboardMap[e.keyCode]=e.type=='keydown'?true:false
+                
+                if (keyboardMap[key_pause] && dead == false)//pause and resume
+                {
+                    if (running==true)
+                    {
+                        gameCtx.font = 40 + 'px Arial';
+                        gameCtx.textAlign = "center";
+                        gameCtx.fillText("Game paused",gameArea.width/2,gameArea.height/2);
+                        gameCtx.font = 20 + 'px Arial';
+                        gameCtx.fillText("Press P to unpause",gameArea.width/2,gameArea.height/2+40);
+                        window.clearInterval(updateLoop);
+                        running=false;
+                    } else
+                    {
+                        updateLoop = window.setInterval(update, FPS);
+                        running=true;
+                    }
+                }
+                if ((keyboardMap[key_restart]) && dead)
+                {
+                    init();
+                }
+            }
+            
+            //Touch handler (for mobile)
+            window.ontouchstart = function() { isTouched = true; };
+            window.ontouchend = function() { isTouched = false; if (dead) {init()} };
+            document.ontouchmove = function(e){ e.preventDefault(); } 
+
+            //tilt handler
+            window.ondevicemotion = function(event)
+            {
+                accelerationX = event.accelerationIncludingGravity.x;
+                accelerationY = event.accelerationIncludingGravity.y;
+                accelerationZ = event.accelerationIncludingGravity.z;
+            }
+            
+            //Camera movement.
+            function cameraMovement()
+            {
+                if (playerY+cameraY+playerHeight < -5)
+                {
+                    die();
+                }
+                var toAdd = gameArea.height-playerY-cameraY-gameArea.height/4;
+                if (toAdd < 0)
+                {
+                    cameraY += Math.floor(toAdd/40);
+                }
+            }
+            
+            //Player movement and reacting to keyboard input.
+            function playerPhysics()
+            {
+                prevPlayerVelocityY = playerVelocityY;
+                if (keyboardMap[key_left]) //left
+                {
+                    if (playerVelocityX > playerSpeed*-1)
+                    {
+                        if (playerInAir)
+                        {
+                            playerVelocityX -= 0.2;
+                        } else
+                        {
+                            playerVelocityX -= 0.8;
+                        }
+                    }
+                }
+                if (keyboardMap[key_right])//right
+                {
+                    if (playerVelocityX < playerSpeed)
+                    {
+                        if (playerInAir)
+                        {
+                            playerVelocityX += 0.2;
+                        } else
+                        {
+                            playerVelocityX += 0.8;
+                        }
+                    }
+                }
+                if ((keyboardMap[key_jump] || keyboardMap[key_up]) || (!isTouched && testForMobile()))//jump
+                {
+                    if (playerInAir == false)
+                    {
+                        playerY += 1
+                        playerVelocityY = 5;
+                        playerInAir = true;
+                    }
+                }
+                if (keyboardMap[key_down] || isTouched)
+                {
+                    playerVelocityY -= 0.1;
+                }
+                
+                //collision detection
+                var colliding = false;
+                for (var i=0; i<=amountOfPlatforms; i++)
+                {
+                    var collidingX = false;
+                    var collidingY = false;
+                    //checking X
+                    if (playerX > platformX[i]-playerWidth/2 && playerX < platformX[i]+platformWidth[i]+playerWidth/2)
+                    {
+                        collidingX = true;
+                    }
+                    //checking Y
+                    if (playerY > platformY[i] && playerY < platformY[i]+platformHeight[i])
+                    {
+                        collidingY = true;
+                        if (collidingX)
+                        {
+                            if (platformType[i] == "moving")
+                            {
+                                playerVirtualVelocityY = -platformMovementPerFrameY[i];
+                            }
+                            playerY = platformY[i]+platformHeight[i]-1
+                        }
+                    }
+                    //code to run if colliding, with access to current stuffs
+                    if (collidingX  && collidingY)
+                    {
+                        if (playerVelocityY < 0)
+                        {
+                            playerVelocityY = 0;
+                        }
+                        
+                        //stuff to be done if platform is moving
+                        if (platformType[i] == "moving")
+                        {
+                            //stick to the platform X
+                            if (platformMovementInvertedX[i])
+                            {
+                                if (platformStartX[i] < platformEndX[i])
+                                {
+                                    playerVirtualVelocityX = -platformMovementPerFrameX[i];
+                                    playerX -= platformMovementPerFrameX[i];
+                                } else
+                                {
+                                    playerVirtualVelocityX = platformMovementPerFrameX[i];
+                                    playerX += platformMovementPerFrameX[i];
+                                }
+                            } else
+                            {
+                                if (platformStartX[i] < platformEndX[i])
+                                {
+                                    playerVirtualVelocityX = platformMovementPerFrameX[i];
+                                    playerX += platformMovementPerFrameX[i];
+                                } else
+                                {
+                                    playerVirtualVelocityX = -platformMovementPerFrameX[i];
+                                    playerX -= platformMovementPerFrameX[i];
+                                }
+                            }
+                            
+                            //stick to the platform Y
+                            if (platformMovementInvertedY[i] && platformStartY[i] < platformEndY[i])
+                            {
+                                playerVirtualVelocityY = platformMovementPerFrameY[i];
+                                playerY -= platformMovementPerFrameY[i];
+                            } else if (platformMovementInvertedY[i] == false && platformStartY[i] > platformEndY[i])
+                            {
+                                playerVirtualVelocityY = platformMovementPerFrameY[i];
+                                playerY -= platformMovementPerFrameY[i];
+                            }
+                        }
+                        
+                        colliding = true;
+                    }
+                }
+                if (colliding)
+                {
+                    playerInAir = false;
+                } else
+                {
+                    playerInAir = true;
+                    playerVirtualVelocityX = 0;
+                    playerVirtualVelocityY = 0;
+                }
+                
+                //accerelometer controls? Hell yeah!
+                if(testForMobile())
+                {
+                    var times=1;
+                    if (playerInAir)
+                    {
+                        times=2;
+                    }
+                    if (window.orientation == 0)
+                    {
+                        var toMove = accelerationX*times;
+                    } else if (window.orientation == 90)
+                    {
+                        var toMove = -accelerationY*times;
+                    } else
+                    {
+                        var toMove = accelerationY*times;
+                    }
+                    if (window.orientation == 0)
+                    {
+                        playerVelocityX = toMove;
+                    } else
+                    {
+                        playerVelocityX = toMove;
+                    }
+                }
+                
+                //bouncy on screen walls (or just stop for phones)
+                if(testForMobile())
+                {
+                    if (playerX < playerWidth/2)
+                    {
+                        playerVelocityX = 0;
+                        playerX = (playerWidth/2)+0.1;
+                    } else if (playerX > gameArea.width-playerWidth/2)
+                    {
+                        playerVelocityX = 0;
+                        playerX = (gameArea.width-playerWidth/2)-0.1
+                    }
+                } else if ((playerX < playerWidth/2 || playerX > gameArea.width-playerWidth/2) && playerInAir)
+                {
+                    {
+                        playerVelocityX *= -0.5;
+                        playerX += playerVelocityX;
+                    }
+                } else if (playerX < playerWidth/2 && playerInAir == false)
+                {
+                    playerVelocityX = 0;
+                    playerX = (playerWidth/2)+0.1;
+                } else if (playerX > gameArea.width-playerWidth/2 && playerInAir == false)
+                {
+                    playerVelocityX = 0;
+                    playerX = (gameArea.width-playerWidth/2)-0.1
+                }
+                
+                //actual modification of player coords
+                playerX += playerVelocityX;
+                playerY += playerVelocityY;
+                
+                //over time set velocity back to 0
+                if (playerVelocityX > 0.50)
+                {
+                    if (playerInAir)
+                    {
+                        playerVelocityX +=0.49;
+                    }
+                    playerVelocityX -= 0.50;
+                } else if (playerVelocityX < -0.50)
+                {
+                    if (playerInAir)
+                    {
+                        playerVelocityX -= 0.49;
+                    }
+                    playerVelocityX += 0.50;
+                } else
+                {
+                    if (playerInAir == false)
+                    {
+                        playerVelocityX = 0;
+                    }
+                }
+                
+                if (playerInAir)
+                {
+                    playerVelocityY -= gravity;
+                }
+            }
+            
+            //Main loop which is run at 60 FPS.
+            function update()
+            {
+                draw();
+                playerPhysics();
+                cameraMovement();
+                if (genPrevY < (-1*cameraY)+gameArea.height)
+                {
+                    generate(1);
+                }
+            }
+            
+            //How to die.
+            function die()
+            {
+                var cookieName="tequilaJumperHighScore"
+                var cookie = document.cookie.split("; ");
+                var highScore;
+                var currVar;
+                for (i=0; i<=cookie.length-1; i++)
+                {
+                    if (cookie[i].split("=")[0]==cookieName)
+                    {
+                        console.log(cookie[i].split("=")[0]+" "+cookie[i].split("=")[1])
+                        highScore=cookie[i].split("=")[1];
+                    }
+                }
+                var newHighScore;
+                if (-cameraY > highScore || isNaN(highScore))
+                {
+                    highScore = -cameraY;
+                    newHighScore = true;
+                }
+                document.cookie = cookieName+"="+highScore;
+                dead = true;
+                gameArea.height = window.innerHeight-50;
+                gameCtx.textAlign = "center";
+                if (newHighScore)
+                {
+                    gameCtx.font = 30 + 'px Arial';
+                    gameCtx.fillStyle = 'red';
+                    gameCtx.fillText("New highscore!",gameArea.width/2,gameArea.height/2-60);
+                }
+                gameCtx.fillStyle='black';
+                gameCtx.font = 40 + 'px Arial';
+                gameCtx.fillText("You died!",gameArea.width/2,gameArea.height/2);
+                gameCtx.font = 20 + 'px Arial';
+                gameCtx.fillText("Your score is "+-cameraY,gameArea.width/2,gameArea.height/2+40);
+                gameCtx.fillText("Your highscore is "+highScore,gameArea.width/2,gameArea.height/2+65);
+                gameCtx.font = 27 + 'px Arial';
+                if(testForMobile())
+                {
+                    gameCtx.fillText("Tap the page to retry.",gameArea.width/2,gameArea.height/2+100);
+                } else
+                {
+                    gameCtx.fillText("Press R to retry.",gameArea.width/2,gameArea.height/2+100);
+                }
+                window.clearInterval(updateLoop);
+            }
+            
+            //Initiating variables and loops.
+            function init()
+            {
+                //canvasInit
+                gameArea = document.getElementById("gameArea");
+                gameCtx = gameArea.getContext("2d");
+                gameArea.height = window.innerHeight;
+                gameArea.width = window.innerWidth;
+                
+                //player variables
+                playerX=gameArea.width/2;
+                playerY=30;
+                playerHeight=22;
+                playerWidth=22;
+                playerSpeed=5;
+                playerVelocityX=0;
+                playerVelocityY=0;
+                playerInAir=false;
+                playerVirtualVelocityX=0;
+                playerVirtualVelocityY=0;
+                
+                //global variables
+                cameraY=0;
+                FPS=1000/60;
+                amountOfPlatforms=0;
+                genPrevX=gameArea.width/2;
+                genPrevY=0;
+                dead=false;
+                accelerationX = 0;
+                accelerationY = 0;
+                accelerationZ = 0;
+                musicQuality["metallica"] = 9001;
+                
+                //platform stuff
+                platformStartX.length = 0;
+                platformStartY.length = 0;
+                platformTime.length = 0;
+                platformType.length = 0;
+                platformWidth.length = 0;
+                platformX.length = 0;
+                platformY.length = 0;
+                platformColor.length = 0;
+                platformEndX.length = 0;
+                platformEndY.length = 0;
+                platformHeight.length = 0;
+                platformMovementInvertedX.length = 0;
+                platformMovementInvertedY.length = 0;
+                platformMovementPerFrameX.length = 0;
+                platformMovementPerFrameY.length = 0;
+                
+                //repeat stuffs
+                running = true;
+                lastLoop = new Date();
+                updateLoop = setInterval(update, FPS);
+                
+                //functions
+                generate(10);
+            }
+            </script>
+    </head>
+    <STYLE TYPE="text/css">
+        body {
+            text-align: center;
+            overflow-y: hidden;
+        }
+        canvas {
+            position: absolute;
+            top: 0px;
+            left: 0px;
+        }
+        </STYLE>
+    <body onload="init()">
+        <canvas id="gameArea" width="600" height="800" ></canvas>
+    </body>
