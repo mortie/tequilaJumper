@@ -3,7 +3,6 @@
     <head>
         <meta name="viewport" content="width=device-width, user-scalable=no" />
         <script type="text/javascript">
-			'use strict';
             //global variables
             var gameArea;
             var gameCtx;
@@ -15,7 +14,7 @@
             var playerVelocityX;
             var playerVelocityY;
             var playerInAir;
-            var keyboardMap = [];
+            var keyboardMap = new Array();
             var cameraY;
             var updateLoop;
             var running;
@@ -31,7 +30,7 @@
             var accelerationZ;
             var dead;
             var isTouched;
-            var musicQuality = [];
+            var musicQuality = new Array();
             var prevPlayerVelocityY;
             var playerVirtualVelocityX;
             var playerVirtualVelocityY;
@@ -39,27 +38,27 @@
             var gravity=0.1;
             
             //platform variables for all platforms
-            var platformHeight = [];
-            var platformWidth = [];
-            var platformType = [];
-            var platformColor = [];
+            var platformHeight = new Array();
+            var platformWidth = new Array();
+            var platformType = new Array();
+            var platformColor = new Array();
             
             //platform variables for type="normal" platforms
-            var platformX = [];
-            var platformY = [];
+            var platformX = new Array();
+            var platformY = new Array();
             
             //used for type="moving" platforms
-            var platformStartX = [];
-            var platformStartY = [];
-            var platformEndX = [];
-            var platformEndY = [];
-            var platformTime = [];
+            var platformStartX = new Array();
+            var platformStartY = new Array();
+            var platformEndX = new Array();
+            var platformEndY = new Array();
+            var platformTime = new Array();
             
             //system platform arrays
-            var platformMovementInvertedX = [];
-            var platformMovementInvertedY = [];
-            var platformMovementPerFrameX = [];
-            var platformMovementPerFrameY = [];
+            var platformMovementInvertedX = new Array();
+            var platformMovementInvertedY = new Array();
+            var platformMovementPerFrameX = new Array();
+            var platformMovementPerFrameY = new Array();
             
             var amountOfPlatforms;
             
@@ -75,7 +74,7 @@
             
             function testForMobile()
             {
-                return (/Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent));
+                return /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent)
             }
             
             //random number in range
@@ -641,7 +640,7 @@
                 var cookie = document.cookie.split("; ");
                 var highScore;
                 var currVar;
-                for (var i=0; i<=cookie.length-1; i++)
+                for (i=0; i<=cookie.length-1; i++)
                 {
                     if (cookie[i].split("=")[0]==cookieName)
                     {
